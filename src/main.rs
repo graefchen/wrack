@@ -15,11 +15,6 @@
 // const e    : [u8; 5] = [0xF0, 0x80, 0xF0, 0x80, 0xF0];
 // const f    : [u8; 5] = [0xF0, 0x80, 0xF0, 0x80, 0x80];
 
-use std::num::NonZeroU32;
-use winit::dpi::LogicalSize;
-use winit::event::{Event, WindowEvent};
-use winit::event_loop::{ControlFlow, EventLoop};
-use winit::window::WindowBuilder;
 use std::io;
 use std::io::prelude::*;
 use std::fs::File;
@@ -97,7 +92,7 @@ impl Cpu {
         }
     }
 
-    pub fn load_rom(&mut self, file_path: String) -> io::Result<()> {
+    pub fn load_rom(&mut self, file_path: String) -> io::Result<u16> {
         let mut f = File::open(file_path)?;
         let mut buffer = Vec::new();
 
@@ -105,13 +100,10 @@ impl Cpu {
         f.read_to_end(&mut buffer)?;
         for i in 0..buffer.len() {
             self.memory[i] = buffer[i];
-            // Below is just an output to check if they are really the same ...
-            // println!("A: {:>08b}{:>08b}", first_byte, second_byte);
-            // println!("B: {:>016b}", double_byte);
-            println!("i is {i}");
-            println!("{:>08b}", self.memory[i]);
+            // println!("i is {i}");
+            // println!("{:>08b}", self.memory[i]);
         }
-        Ok(())
+        Ok(buffer.len() as u16)
     }
 
     pub fn execute_cycle(&mut self) {
@@ -156,7 +148,7 @@ impl Cpu {
             // DRW Vx, VY, nibble
             (0xD, _, _, _) => todo!("'DRW Vx, VY, nibble' not impelmented yet!"),
             // Unknown Opcode
-            (_, _, _, _) => println!("Unknown opcode"),
+            (_, _, _, _) => todo!("Unknown opcode"),
         }
     }
 }
@@ -166,72 +158,11 @@ fn read_word(memory: [u8; 4096], index: u16) -> u16 {
 }
 
 fn main() -> io::Result<()> {
-    let event_loop = EventLoop::new();
-    let window = {
-        let size = LogicalSize::new((WIDTH * 10) as f64, (HEIGHT * 10) as f64);
-        WindowBuilder::new()
-            .with_title("Chip-8 Emulator")
-            .with_inner_size(size)
-            .with_min_inner_size(size)
-            .with_max_inner_size(size)
-            .build(&event_loop)
-            .unwrap()
-    };
-    let context = unsafe { softbuffer::Context::new(&window) }.unwrap();
-    let mut surface = unsafe { softbuffer::Surface::new(&context, &window) }.unwrap();
-
     let mut chip = Cpu::new();
-    chip.load_rom("rom/IBM".to_string()).unwrap();
+    let lenght = chip.load_rom("rom/IBM".to_string()).unwrap();
+    for _ in 0..lenght {
+        chip.execute_cycle ();
+    }
+    Ok(())
 
-    event_loop.run(move |event, _, control_flow| {
-        *control_flow = ControlFlow::Wait;
-
-        match event {
-            Event::RedrawRequested(window_id) if window_id == window.id() => {
-                let (width, height) = {
-                    let size = window.inner_size();
-                    (size.width, size.height)
-                };
-                // This here needs to be done for some weird reson that I do nut understand...
-                surface
-                    .resize(
-                        NonZeroU32::new(width).unwrap(),
-                        NonZeroU32::new(height).unwrap(),
-                    )
-                    .unwrap();
-
-                let mut buffer = surface.buffer_mut().unwrap();
-
-                chip.execute_cycle();
-
-                for y in 0..height {
-                    for x in 0..width {
-                        let on = chip.display.get_pixel(width as usize / WIDTH, height as usize / HEIGHT);
-                        let colour = {
-                            if on {
-                                1
-                            }
-                            else {
-                                0
-                            }
-                        };
-                        let red = colour;
-                        let green = colour;
-                        let blue = colour;
-                        let index = y as usize * width as usize + x as usize;
-                        buffer[index] = blue | (green << 8) | (red << 16);
-                    }
-                }
-
-                buffer.present().unwrap();
-            }
-            Event::WindowEvent {
-                event: WindowEvent::CloseRequested,
-                window_id,
-            } if window_id == window.id() => {
-                *control_flow = ControlFlow::Exit;
-            }
-            _ => {}
-        }
-    })
 }

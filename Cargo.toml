@@ -6,5 +6,3 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-softbuffer = { git = "https://github.com/rust-windowing/softbuffer.git" }
-winit = "0.28.5"
