@@ -1,6 +1,14 @@
+use pixels::{Pixels, SurfaceTexture};
+use winit::dpi::LogicalSize;
+use winit::event::{Event, WindowEvent, VirtualKeyCode};
+use winit::event_loop::{ControlFlow, EventLoop};
+use winit::window::WindowBuilder;
+use winit_input_helper::WinitInputHelper;
+
 use std::io;
 use std::io::prelude::*;
 use std::fs::File;
+use std::env;
 
 const WIDTH: usize = 64;
 const HEIGHT: usize = 32;
@@ -24,6 +32,7 @@ pub static FONT_SET: [u8; 80] = [
     0xF0, 0x80, 0xF0, 0x80, 0x80  // G
 ];
 
+#[derive(Debug, Clone, Copy)]
 pub struct Display {
     pub memory: [u8; 2048],
 }
@@ -63,13 +72,13 @@ impl Display {
             for i in 0..8 {
                 let new_value = row >> (7 - i) & 0x01;
                 if new_value == 1 {
-                    let xi = (x + 1) % WIDTH;
-                    let yi = (y + 1) % HEIGHT;
-                    let old_value = self.get_pixel(xi, yi);
+                    let xi = (x + i) % WIDTH;
+                    let yj = (y + j) % HEIGHT;
+                    let old_value = self.get_pixel(xi, yj);
                     if old_value {
                         collision = true;
                     }
-                    self.set_pixel(xi, yi, (new_value == 1) ^ old_value);
+                    self.set_pixel(xi, yj, (new_value == 1) ^ old_value);
                 }
             }
         }
@@ -185,7 +194,7 @@ impl Cpu {
                 self.v[0xF] = if collision { 1 } else { 0 };
             },
             // Unknown Opcode
-            (_, _, _, _) => (),
+            (_, _, _, _) => todo!("Unknown opcode"),
         }
     }
 }
@@ -194,28 +203,98 @@ fn read_word(memory: [u8; 4096], index: u16) -> u16 {
     (memory[index as usize] as u16) << 8 | (memory[(index + 1) as usize] as u16)
 }
 
-fn display(mut display: Display) {
-    // for i in 0..display.memory.len() {
-    //     print!("{} ", i);
-    // }
+struct Window {}
 
-    for x in 0..WIDTH {
-        for y in 0..HEIGHT {
-            if display.get_pixel(x, y) {
-                print!("*")
+impl Window {
+    fn new() -> Self {
+        Self {}
+    }
+
+    fn draw(&self, frame: &mut [u8], display: Display) {
+        let mut d = display;
+        for(i, pixel) in frame.chunks_exact_mut(4).enumerate() {
+            let x = (i % WIDTH as usize) as usize;
+            let y = (i / WIDTH as usize) as usize;
+
+            let rgba = if d.get_pixel(x, y) {
+                [0xFF, 0xFF, 0xFF, 0xFF]
             } else {
-                print!(" ")
-            }
+                [0x00, 0x00, 0x00, 0x00]
+            };
+            pixel.copy_from_slice(&rgba);
         }
-        println!("")
     }
 }
 
-fn main() -> io::Result<()> {
-    let mut chip = Cpu::new();
-    chip.reset();
-    chip.load_rom("rom/IBM".to_string()).unwrap();
-    loop {
+fn render (mut chip: Cpu) {
+    let event_loop = EventLoop::new();
+    let mut input = WinitInputHelper::new();
+    let window = {
+        let size = LogicalSize::new((WIDTH * 15) as f64, (HEIGHT * 15) as f64);
+        WindowBuilder::new()
+            .with_title("Chip-8 Emulator")
+            .with_inner_size(size)
+            .with_min_inner_size(size)
+            .with_resizable(false)
+            .build(&event_loop)
+            .unwrap()
+    };
+    let mut pixels = {
+        let window_size = window.inner_size();
+        let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, &window);
+        Pixels::new(WIDTH as u32, HEIGHT as u32, surface_texture).unwrap()
+    };
+    let win = Window::new();
+
+    event_loop.run(move |event, _, control_flow| {
+        *control_flow = ControlFlow::Wait;
+
+        // One of the most important functions ...
+        // letting the cpu execute an cycle
         chip.execute_cycle();
+
+        match event {
+            Event::RedrawRequested(window_id) if window_id == window.id() => {
+                win.draw(pixels.frame_mut(), chip.display);
+                if let Err(_) = pixels.render() {
+                    *control_flow = ControlFlow::Exit;
+                    return;
+                }
+            }
+            Event::WindowEvent {
+                event: WindowEvent::CloseRequested,
+                window_id,
+            } if window_id == window.id() => {
+                *control_flow = ControlFlow::Exit;
+            }
+            // Redraw the window ... again
+            Event::MainEventsCleared => window.request_redraw(),
+            _ => {}
+        }
+
+        if input.update(&event) {
+            // Close events
+            if input.key_pressed(VirtualKeyCode::Escape) || input.quit() {
+                *control_flow = ControlFlow::Exit;
+                return;
+            }
+
+            window.request_redraw();
+        }
+    });
     }
+
+fn main() {
+    let args: Vec<String> = env::args().collect();
+
+    println!("{:?} arguments: {:?}.", args.len() - 1, &args[1..]);
+
+    // Declare the chip
+    let mut chip = Cpu::new();
+    // Reset the chip
+    chip.reset();
+    // Load an ROM
+    chip.load_rom("rom/bin/IBM".to_string()).unwrap();
+    // render the shit
+    render(chip);
 }
