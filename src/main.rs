@@ -15,6 +15,15 @@
 // const e    : [u8; 5] = [0xF0, 0x80, 0xF0, 0x80, 0xF0];
 // const f    : [u8; 5] = [0xF0, 0x80, 0xF0, 0x80, 0x80];
 
+use std::num::NonZeroU32;
+use winit::dpi::LogicalSize;
+use winit::event::{Event, WindowEvent};
+use winit::event_loop::{ControlFlow, EventLoop};
+use winit::window::WindowBuilder;
+use std::io;
+use std::io::prelude::*;
+use std::fs::File;
+
 const WIDTH: usize = 64;
 const HEIGHT: usize = 32;
 
@@ -88,13 +97,20 @@ impl Cpu {
         }
     }
 
-    pub fn load_rom() -> io::Result<()> {
-        let mut f = File::open("rom/IBM")?;
+    pub fn load_rom(&mut self, file_path: String) -> io::Result<()> {
+        let mut f = File::open(file_path)?;
         let mut buffer = Vec::new();
 
         // read the whole file
-        f.read_to_end(&mut  buffer)?;
-        println!("{:?}",buffer);
+        f.read_to_end(&mut buffer)?;
+        for i in 0..buffer.len() {
+            self.memory[i] = buffer[i];
+            // Below is just an output to check if they are really the same ...
+            // println!("A: {:>08b}{:>08b}", first_byte, second_byte);
+            // println!("B: {:>016b}", double_byte);
+            println!("i is {i}");
+            println!("{:>08b}", self.memory[i]);
+        }
         Ok(())
     }
 
@@ -149,15 +165,6 @@ fn read_word(memory: [u8; 4096], index: u16) -> u16 {
     (memory[index as usize] as u16) << 8 | (memory[(index + 1) as usize] as u16)
 }
 
-use std::num::NonZeroU32;
-use winit::dpi::LogicalSize;
-use winit::event::{Event, WindowEvent};
-use winit::event_loop::{ControlFlow, EventLoop};
-use winit::window::WindowBuilder;
-use std::io;
-use std::io::prelude::*;
-use std::fs::File;
-
 fn main() -> io::Result<()> {
     let event_loop = EventLoop::new();
     let window = {
@@ -174,7 +181,7 @@ fn main() -> io::Result<()> {
     let mut surface = unsafe { softbuffer::Surface::new(&context, &window) }.unwrap();
 
     let mut chip = Cpu::new();
-    let res = chip.load_rom();
+    chip.load_rom("rom/IBM".to_string()).unwrap();
 
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
