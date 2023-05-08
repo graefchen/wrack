@@ -1,10 +1,6 @@
 # wrack - a rusted chip-8 implementation
 
-bitwise OR = A bitwise OR compares the corrseponding bits from two values, and if either bit is 1, then the same bit in the result is also 1. Otherwise, it is 0.
-
-bitwise AND =  A bitwise AND compares the corrseponding bits from two values, and if both bits are 1, then the same bit in the result is also 1. Otherwise, it is 0.
-
-exclusive OR = An exclusive OR compares the corrseponding bits from two values, and if the bits are not both the same, then the corresponding bit in the result is set to 1. Otherwise, it is 0.
+## Project neads more work but I am just done with this project for the time.
 
 
 ## Refernces:

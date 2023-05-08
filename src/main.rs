@@ -157,9 +157,10 @@ impl Cpu {
         // read the whole file
         f.read_to_end(&mut buffer)?;
         for i in 0..buffer.len() {
-            self.memory[0x200 + i] = buffer[i];
             // println!("i is {i}");
             // println!("{:>08b}", self.memory[i]);
+            // Start loading it at 0x200 / 512
+            self.memory[0x200 + i] = buffer[i];
         }
         Ok(buffer.len() as u16)
     }
@@ -210,9 +211,12 @@ impl Cpu {
 
             // RET
             // Return from a subroutine
-            // Set the pc on the address of the top of the stack,
+            // Set the pc on the address of the top of the stack,f
             // then decrement the stack by 1
-            (0, 0, 0xE, 0xE) => todo!("'RET' not implemented yet!"),
+            (0, 0, 0xE, 0xE) => {
+                self.pc = self.stack[self.sp as usize];
+                self.sp -= 1;
+            },
 
             // JP addr
             // Jump to location addr
@@ -220,27 +224,43 @@ impl Cpu {
 
             // CALL addr
             // Call subroutine at nnn
-            // Increment the sp, the put current PC on the top of the stack,
+            // Increment the sp, then put current PC on the top of the stack,
             // Then set the PC to nnn
-            (0x2, _, _, _) => todo!("CALL addr"),
+            (0x2, _, _, _) => {
+                self.sp += 1;
+                self.stack[self.sp as usize] = self.pc;
+                self.pc = nnn;
+            }
 
             // SE vx, byte"
             // Skip next instruction if Vx = kk
             // Compare register Vk to kk and
             // if they are equal increment pc by 2
-            (0x3, _, _, _) => todo!("SE vx, byte"),
+            (0x3, _, _, _) => {
+                if vx == kk {
+                    self.pc += 2;
+                }
+            },
 
             // SNE vx, byte
             // Skip next instruction if Vx != kk
             // Compare register Vx to kk and
             // if they are not equal increment pc by 2
-            (0x4, _, _, _) => todo!("SNE vx, byte"),
+            (0x4, _, _, _) => {
+                if vx != kk {
+                    self.pc += 2;
+                }
+            },
 
             // SE Vx, Vy
             // Skip next instruction if Vx = Vy.
             // Compares register Vx to register Vy and
             // if they are equal increment tpc by 2
-            (0x5, _, _, _) => todo!("SE Vx, Vy"),
+            (0x5, _, _, _) => {
+                if vx == vy {
+                    self.pc += 2;
+                }
+            },
 
             // LD Vx, byte
             // Put value kk into register Vx
@@ -249,58 +269,93 @@ impl Cpu {
             // ADD Vx, byte
             // Add the value kk to the value of register Vx
             // and the store the result in Vx
-            (0x7, _, _, _) => self.v[x] = self.v[x] + kk,
+            (0x7, _, _, _) => (self.v[x], _) = vx.overflowing_add(kk),
 
             // LD Vx, Vy
             // Stores the value of Vy in register Vx
-            (0x8, _, _, 0x0) => todo!("LD Vx, Vy"),
+            (0x8, _, _, 0x0) => self.v[x] = vy,
             // OR Vx, Vy
             // Set Vx = Vx OR Vy
             // Perform bitwise OR on the values of Vx and Vy and
             // then store the result in Vx
-            (0x8, _, _, 0x1) => todo!("OR Vx, Vy"),
+            (0x8, _, _, 0x1) => self.v[x] |= vy,
             // AND Vx. Vy
             // Set Vx = Vx AND Vy
             // Perform bitwise AND on the values of Vx and Vy and
             // then store the result in Vx
-            (0x8, _, _, 0x2) => todo!("AND Vx, Vy"),
+            (0x8, _, _, 0x2) => self.v[x] &= vy,
             // XOR Vx, Vy
             // Set Vx = VX XOR Vy
             // Performs bitwise exclusive OR on the values of Vx and Vy and
             // then store the result in Vx
-            (0x8, _, _, 0x3) => todo!("XOR Vx, Vy"),
+            (0x8, _, _, 0x3) => self.v[x] ^= vy,
             // ADD Vx, Vy
             // Set Vx = Vx + Vy, set VF = carry
             // The values of Vx and Vy are added together
             // If the result is greater than 8 bits, VF is set to 1, otherwise 0
-            // ONly the lowest 8 bits of the result are kept and stored in Vx
-            (0x8, _, _, 0x4) => todo!("ADD Vx, Vy"),
+            // Only the lowest 8 bits of the result are kept and stored in Vx
+            (0x8, _, _, 0x4) => {
+                let (res, overflow) = vx.overflowing_add(vy);
+                match overflow {
+                    true => self.v[0xF] = 1,
+                    false => self.v[0xF] = 0,
+                }
+                self.v[x] = res;
+            },
             // SUB Vx, Vy
             // Set Vx = Vx - Vy, set VF = not borrow
             // If Vx > Vy, then VF is set to 1, othwerwise 0
             // Then Vy is szbtracted from Vx and the result stored in Vx
-            (0x8, _, _, 0x5) => todo!("SUB Vx, Vy"),
+            (0x8, _, _, 0x5) => {
+                let (res, overflow) = vx.overflowing_sub(vy);
+                match overflow {
+                    true => self.v[0xF] = 0,
+                    false => self.v[0xF] = 1,
+                }
+                self.v[x] = res;
+            },
             // SHR Vx {, Vy}
             // Set Vx = Vx SHR 1
             // If the least-significant bit of Vx is 1,
-            // then VF is set to 1, otherwise 0, then Vx is devided by 2
-            (0x8, _, _, 0x6) => todo!("SHR Vx {}", "{, Vy}"),
+            // then VF is set to 1, otherwise 0, then Vx is divided by 2
+            (0x8, _, _, 0x6) => {
+                self.v[0xF] = vx & 0x1;
+                self.v[x] >>= 1;
+            },
             // SUBN Vx, Vy
             // Set Vx = Vy - Vx, set VF = NOT borrow
             // If Vy > Vy, then VF is 1, otherwise 0
             // Then Vx is subtracted from Vy, and the result stored in Vx
-            (0x8, _, _, 0x7) => todo!("SUBN Vx, Vy"),
+            (0x8, _, _, 0x7) => {
+                let (res, overflow) = vy.overflowing_sub(vx);
+                match overflow {
+                    true => self.v[0xF] = 0,
+                    false => self.v[0xF] = 1,
+                }
+                self.v[x] = res;
+            },
             // SHL Vx  {, Vy}
             // Set Vx 0 Vx SHL 1
             // If the most-significant bit of Vx is 1,
-            // then VF is set to 1, otherwise 0, then Vx is devided by 2
-            (0x8, _, _, 0xE) => todo!("SHL Vx {}", "{, Vy}"),
+            // then VF is set to 1, otherwise 0, then Vx is multiplied by 2
+            (0x8, _, _, 0xE) => {
+                let msb = vx & 0x80 == 0x80;
+                match msb {
+                    true => self.v[0xF] = 1,
+                    false => self.v[0xF] = 0
+                }
+                self.v[x] <<= 1;
+            },
 
             // SNE Vx, Vy
             // Skip next instruction if Vx != Vy
-            // Compare register Vx to vY and
+            // Compare register Vx to Vy and
             // if they are not equal increment pc by 2
-            (0x9, _ , _, 0x0) => todo!("SNE Vx, Vy"),
+            (0x9, _ , _, 0x0) => {
+                if vx != vy {
+                    self.pc += 2;
+                }
+            },
 
             // LD I, addr
             // Set I = nnn
@@ -310,7 +365,7 @@ impl Cpu {
             // JV V0, addr
             // Jump to location nnn + V0
             // pc is set to nnn plus the value of V0
-            (0xB, _, _, _) => todo!("JV V0, addr"),
+            (0xB, _, _, _) => self.pc = nnn + self.v[0] as u16,
 
             // RND Vx, byte
             // Set Vx = random byte AND kk
@@ -350,7 +405,7 @@ impl Cpu {
             // LD Vx, DT
             // Set Vx = delay timer value
             // The value of DT is placed into Vx
-            (0xF, _, 0x0, 0x7) => todo!("LD Vx, DT"),
+            (0xF, _, 0x0, 0x7) => self.v[x] = self.dt,
 
             // LD Vx, K
             // Wait for a key press, store the value of the key in Vx
@@ -359,8 +414,8 @@ impl Cpu {
 
             // LD DT, Vx
             // Set delay timer = Vx
-            // DT os set equal to the value of Vx
-            (0xF, _, 0x1, 0x5) => todo!("LD DT, Vx"),
+            // DT is set equal to the value of Vx
+            (0xF, _, 0x1, 0x5) => self.dt = self.v[x],
 
             // LD ST, Vx
             // Set sound timer = Vx
@@ -377,7 +432,7 @@ impl Cpu {
             // Set I = location of sprite for digit Vx
             // The value of I is set to the location for the hexadecimal sprite
             // corresponding to the value of Vx.
-            (0xF, _, 0x2, 0x9) => todo!("LD F, Vx"),
+            (0xF, _, 0x2, 0x9) => self.i = vx as u16 * 5,
 
             // LD B, Vx
             // Store BCD representation of Vx in memory locations I, I+1 and I+2
@@ -385,19 +440,25 @@ impl Cpu {
             // and places a houndred digit in memory at location in i
             // and tens digit at location I+1
             // and ones digit at location I+2
-            (0xF, _, 0x3, 0x3) => todo!("LD B, Vx"),
+            (0xF, _, 0x3, 0x3) => {
+                self.memory[self.i as usize] = vx / 100;
+                self.memory[self.i as usize + 1] = (vx / 10) % 10;
+                self.memory[self.i as usize + 2] = (vx % 100) % 10;
+            },
 
             // LD [I], Vx
             // Store registers V0 through Vx from memory starting at location I
             // Copy the values of register V0 through Vx into memory,
             // starting at address in I
-            (0xF, _, 0x5, 0x5) => todo!("LD [I], Vx"),
+            (0xF, _, 0x5, 0x5) => self.memory[(self.i as usize)..(self.i + x as u16 + 1) as usize]
+                .copy_from_slice(&self.v[0..(x as usize + 1)]),
 
             // LD Vx, [I]
             // Read registers V0 through Vx from memory starting at location I
             // Read the values from memory starting at location I
             // into registers V0 through Vx
-            (0xF, _, 0x6, 0x5) => todo!("LD Vx, [I]"),
+            (0xF, _, 0x6, 0x5) => self.v[0..(x as usize + 1)]
+            .copy_from_slice(&self.memory[(self.i as usize)..(self.i + x as u16 + 1) as usize]),
 
             // There is the possibility
             // to add further instructions for the Super Chip-48
@@ -477,8 +538,6 @@ fn render (mut chip: Cpu) {
             } if window_id == window.id() => {
                 *control_flow = ControlFlow::Exit;
             }
-            // Redraw the window ... again
-            Event::MainEventsCleared => window.request_redraw(),
             _ => {}
         }
 
@@ -492,19 +551,18 @@ fn render (mut chip: Cpu) {
             window.request_redraw();
         }
     });
-    }
+}
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-
-    println!("{:?} arguments: {:?}.", args.len() - 1, &args[1..]);
 
     // Declare the chip
     let mut chip = Cpu::new();
     // Reset the chip
     chip.reset();
     // Load an ROM
-    chip.load_rom("rom/bin/test_opcode.ch8".to_string()).unwrap();
-    // render the shit
+    chip.load_rom(args[1].to_string()).unwrap();
+
+    // render the chip
     render(chip);
 }
