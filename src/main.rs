@@ -4,6 +4,7 @@ use winit::event::{Event, WindowEvent, VirtualKeyCode};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::WindowBuilder;
 use winit_input_helper::WinitInputHelper;
+use rand::Rng;
 
 use std::io;
 use std::io::prelude::*;
@@ -373,7 +374,10 @@ impl Cpu {
             // which is then ANDed with the value of kk
             // the result us stored in Vx
             // (See Instruction 8xy2 for AND)
-            (0xC, _, _, _) => todo!("RND Vx, byte"),
+            (0xC, _, _, _) => {
+                let rnd = rand::thread_rng().gen_range(0x00..0xFF);
+                self.v[x] = rnd & kk;
+            },
 
             // DRW Vx, Vy, nibble
             // Display n-byte sprite starting at memory location I at (Vx, Vy), set VF = collision
@@ -559,7 +563,7 @@ fn main() {
     // Declare the chip
     let mut chip = Cpu::new();
     // Reset the chip
-    chip.reset();
+    // chip.reset();
     // Load an ROM
     chip.load_rom(args[1].to_string()).unwrap();
 

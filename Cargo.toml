@@ -9,3 +9,4 @@ edition = "2021"
 pixels = { git = "https://github.com/parasyte/pixels.git" }
 winit = "0.27"
 winit_input_helper = "0.13"
+rand = "*"
