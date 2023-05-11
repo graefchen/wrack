@@ -234,6 +234,8 @@ pub struct Cpu {
     pub sp: u8,
     // delay timer
     pub dt: u8,
+    // sound timer
+    pub st: u8,
 }
 
 impl Cpu {
@@ -248,6 +250,7 @@ impl Cpu {
             stack: [0; 16],
             sp: 0,
             dt: 0,
+            st: 0,
         }
     }
 
@@ -261,6 +264,7 @@ impl Cpu {
         self.stack = [0; 16];
         self.sp = 0;
         self.dt = 0;
+        self.st = 0;
         self.display.cls();
         // Load in the font
         for i in 0..80 {
@@ -511,17 +515,25 @@ impl Cpu {
                 self.v[0xF] = if collision { 1 } else { 0 };
             },
 
-            // SKP Vy
+            // SKP Vx
             // Skip next instrucion if the key with the value of Vx is pressed
             // Check the keyboard, and if the key corresponding to the value of
             // Vx is currently in the down position, pc is increased by 2
-            (0xE, _, 0x9, 0xE) => todo!("SKP Vy"),
+            (0xE, _, 0x9, 0xE) => {
+                if self.keypad.is_key_down(vx) {
+                    self.pc += 2;
+                }
+            },
 
-            // SKNP Vy
+            // SKNP Vx
             // Skip next instrucion if the key with the value of Vx is not pressed
             // Check the keyboard, and if the key corresponding to the value of
             // Vx is currently in the up position, pc is increased by 2
-            (0xE, _, 0xA, 0x1) => todo!("SKNP Vy"),
+            (0xE, _, 0xA, 0x1) => {
+                if !self.keypad.is_key_down(vx) {
+                    self.pc += 2;
+                }
+            },
 
             // LD Vx, DT
             // Set Vx = delay timer value
@@ -531,7 +543,15 @@ impl Cpu {
             // LD Vx, K
             // Wait for a key press, store the value of the key in Vx
             // All execution stops until a key is pressed, them the value of the key is stored in Vx
-            (0xF, _, 0x0, 0xA) => todo!("LD Vx, K"),
+            (0xF, _, 0x0, 0xA) => {
+                self.pc -= 2;
+                for (i, key) in self.keypad.keys.iter().enumerate() {
+                    if *key == true {
+                        self.v[x] = i as u8;
+                        self.pc += 2;
+                    }
+                }
+            },
 
             // LD DT, Vx
             // Set delay timer = Vx
@@ -541,13 +561,13 @@ impl Cpu {
             // LD ST, Vx
             // Set sound timer = Vx
             // ST is set equal to the value of Vx
-            (0xF, _, 0x1, 0x8) => todo!("LD ST, Vx"),
+            (0xF, _, 0x1, 0x8) => self.st = vx,
 
             // ADD I, Vx
             // Set I = I + Vx
             // The values of I and Vx are added
             // the result is stored in I
-            (0xF, _, 0x1, 0xF) => todo!("ADD I, Vx"),
+            (0xF, _, 0x1, 0xF) => self.i += vx as u16,
 
             // LD F, Vx
             // Set I = location of sprite for digit Vx
