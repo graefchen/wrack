@@ -187,7 +187,7 @@ impl Keypad {
                         self.keys[11] = true;
                         true
                     },
-                    VirtualKeyCode::Z    => {
+                    VirtualKeyCode::Y    => {
                         self.keys[12] = true;
                         true
                     },

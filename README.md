@@ -1,6 +1,13 @@
 # wrack - a rusted chip-8 implementation
 
-## Project neads more work but I am just done with this project for the time.
+## ATM it is "finished" in the way that it (should) be fully functional
+
+
+## usage:
+
+```sh
+$ cargo run <location of the rom>
+```
 
 
 ## Refernces:
