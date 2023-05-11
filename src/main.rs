@@ -1,6 +1,6 @@
 use pixels::{Pixels, SurfaceTexture};
 use winit::dpi::LogicalSize;
-use winit::event::{Event, WindowEvent, VirtualKeyCode};
+use winit::event::{Event, WindowEvent, VirtualKeyCode, KeyboardInput, ElementState};
 use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::WindowBuilder;
 use winit_input_helper::WinitInputHelper;
@@ -118,6 +118,102 @@ impl Keypad {
     pub fn is_key_down(&self, index: u8) -> bool {
         self.keys[index as usize]
     }
+
+    pub fn process_inputs(&mut self, event: &WindowEvent) -> bool {
+        match event {
+            WindowEvent::KeyboardInput {
+				input:
+					KeyboardInput {
+						virtual_keycode: Some(key),
+						state,
+						..
+					},
+				..
+			} => self.keypad_input(*key,  *state),
+            _ => false,
+        }
+    }
+
+    fn keypad_input(&mut self, key: VirtualKeyCode, state: ElementState) -> bool {
+        let amount = if state == ElementState::Pressed { true } else { false };
+        match amount {
+            true => {
+                match key {
+                    VirtualKeyCode::Key1 => {
+                        self.keys[0] = true;
+                        true
+                    },
+                    VirtualKeyCode::Key2 => {
+                        self.keys[1] = true;
+                        true
+                    },
+                    VirtualKeyCode::Key3 => {
+                        self.keys[2] = true;
+                        true
+                    },
+                    VirtualKeyCode::Key4 => {
+                        self.keys[3] = true;
+                        true
+                    },
+                    VirtualKeyCode::Q    => {
+                        self.keys[4] = true;
+                        true
+                    },
+                    VirtualKeyCode::W    => {
+                        self.keys[5] = true;
+                        true
+                    },
+                    VirtualKeyCode::E    => {
+                        self.keys[6] = true;
+                        true
+                    },
+                    VirtualKeyCode::R    => {
+                        self.keys[7] = true;
+                        true
+                    },
+                    VirtualKeyCode::A    => {
+                        self.keys[8] = true;
+                        true
+                    },
+                    VirtualKeyCode::S    => {
+                        self.keys[9] = true;
+                        true
+                    },
+                    VirtualKeyCode::D    => {
+                        self.keys[10] = true;
+                        true
+                    },
+                    VirtualKeyCode::F    => {
+                        self.keys[11] = true;
+                        true
+                    },
+                    VirtualKeyCode::Z    => {
+                        self.keys[12] = true;
+                        true
+                    },
+                    VirtualKeyCode::X    => {
+                        self.keys[13] = true;
+                        true
+                    },
+                    VirtualKeyCode::C    => {
+                        self.keys[14] = true;
+                        true
+                    },
+                    VirtualKeyCode::V    => {
+                        self.keys[15] = true;
+                        true
+                    },
+                    _ => {
+                        for i in 0..self.keys.len() {
+                            self.keys[i] = false;
+                        }
+                        false
+                    }
+                }
+            }
+            false => false,
+        }
+    }
 }
 
 pub struct Cpu {
@@ -130,7 +226,7 @@ pub struct Cpu {
     // register
     pub v: [u8; 16],
     // peripherals
-    // pub keypad: Keypad,
+    pub keypad: Keypad,
     pub display: Display,
     // stack
     pub stack: [u16; 16],
@@ -147,6 +243,7 @@ impl Cpu {
             pc: 0,
             memory: [0; 4096],
             v: [0; 16],
+            keypad: Keypad::new(),
             display: Display::new(),
             stack: [0; 16],
             sp: 0,
@@ -557,10 +654,22 @@ fn render (mut chip: Cpu) {
                 }
             }
             Event::WindowEvent {
-                event: WindowEvent::CloseRequested,
+                ref event,
                 window_id,
-            } if window_id == window.id() => {
-                *control_flow = ControlFlow::Exit;
+            } if window_id == window.id() && !chip.keypad.process_inputs(event) => {
+                match event {
+                    WindowEvent::CloseRequested
+                    | WindowEvent::KeyboardInput {
+                        input:
+                            KeyboardInput {
+                                state: ElementState::Pressed,
+                                virtual_keycode: Some(VirtualKeyCode::Escape),
+                                ..
+                            },
+                        ..
+                    } => *control_flow = ControlFlow::Exit,
+                    _ => {}
+                }
             }
             _ => {}
         }
